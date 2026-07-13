@@ -1,32 +1,68 @@
-# ため池レジリエンスAIプラットフォーム 開発資料一式
+# Tameike Resilience AI / Satellite PondWatch
 
-作成日: 2026年7月13日
-文書状態: 公募予告ベースのドラフト v0.9
+NEDO Space Data Challenge「テーマ2：インフラに係る防災・災害対応」向けのMVPです。衛星データ、ため池台帳、地形、気象、AI、物理シミュレーションを統合する将来構成を前提に、現時点では台帳取り込み、地図検索、詳細、災害イベント、説明可能なリスクスクリーニングを実装しています。
 
-## 収録物
+## 起動
 
-1. `01_コンペ提案書.docx` - NEDO Challenge テーマ2向け提案本文
-2. `02_要件定義・システム仕様書.docx` - 機能・非機能要件、受入基準
-3. `03_データ_AI_シミュレーション設計書.docx` - データモデル、衛星AI、物理モデル、評価
-4. `04_画面_API設計書.docx` - 主要画面ワイヤーフレーム、API一覧
-5. `05_試験_実証_運用設計書.docx` - 試験、UAT、セキュリティ、ランブック
-6. `06_事業化計画_ロードマップ.docx` - 顧客、競合、価格、市場、3年計画
-7. `openapi.yaml` - PoC向けOpenAPI 3.1仕様
-8. `database_schema.sql` - PostgreSQL/PostGISの初期スキーマ
-9. `assets/` - 文書内に使用した設計図・ワイヤーフレーム
+```bash
+cp .env.example .env
+make setup
+make migrate
+make seed
+make up
+```
 
-## 正式公募要項公開後に必ず更新する項目
+- Web UI: http://localhost:3000
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- MinIO Console: http://localhost:9001
 
-- 応募様式、ページ数、ファイル形式
-- 審査項目と配点
-- 懸賞金額、開発支援、衛星データ提供条件
-- 知的財産、成果公開、データライセンス
-- 共同応募、代表者、契約・経理要件
-- 中間レビュー、メンタリング、最終ピッチ要件
+## 主要コマンド
 
-## 現時点の設計判断
+```bash
+make setup
+make up
+make down
+make migrate
+make seed
+make import-ponds
+make test
+make lint
+make format
+make e2e
+```
 
-- リアルタイム警戒・シミュレーションと生成AIの調査・報告機能を分離する。
-- 衛星は全池の一次スクリーニング、重点池は水位・カメラ・現地調査を併用する。
-- 既存のため池防災システムを置換せず、衛星観測・動的更新・業務APIとして補完する。
-- 初期商用は完全SaaSではなく、重点池群のデータ整備を含む準受託型パッケージとする。
+## 台帳インポート
+
+```bash
+cd apps/api
+python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --limit 1000
+```
+
+インポートでは元値を `source_payload`、正規化値を `normalized_payload`、品質問題を `quality_flags` に保持します。`0`、`9999`、`9999.9` は欠損候補として扱い、重複候補はフラグ付けのみで自動統合しません。
+
+## MVP API
+
+- `GET /health`
+- `GET /ponds`
+- `GET /ponds/{pond_id}`
+- `GET /ponds/{pond_id}/risk`
+- `GET /ponds/{pond_id}/inspections`
+- `GET /ponds/{pond_id}/observations`
+- `GET /ponds/{pond_id}/remote-sensing-assets`
+- `GET/POST /disaster-events`
+- `POST /risk-assessments/run`
+- `GET /risk-assessments/{assessment_id}`
+- `GET /recommended-actions`
+- `POST /reports/generate`
+
+## 未接続範囲
+
+- 衛星API: Providerインターフェースのみ。未設定時は `not_configured` を返します。
+- 物理シミュレータ: Providerインターフェースとサンプル結果のみ。実行済みとは表示しません。
+- PLATEAU / 3D Tiles: 画面はサンプルモードを前提に拡張可能です。
+- 認証・RBAC: ロール設計を想定していますが、MVPでは外部認証基盤未接続です。
+
+## リスク評価
+
+`hazard`、`vulnerability`、`exposure`、`anomaly`、`uncertainty` を0〜1に正規化し、設定可能な重みで合成します。これは「リスクスクリーニングスコア」であり、決壊確率ではありません。
