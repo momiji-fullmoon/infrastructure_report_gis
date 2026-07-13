@@ -1,0 +1,249 @@
+openapi: 3.1.0
+info:
+  title: Tameike Sentinel API
+  version: 0.9.0
+  description: ため池レジリエンスAIプラットフォームのPoC向けAPI仕様
+servers:
+  - url: https://api.example.jp/v1
+security:
+  - oauth2: [pond.read]
+paths:
+  /ponds:
+    get:
+      summary: ため池一覧を検索
+      parameters:
+        - in: query
+          name: municipalityCode
+          schema: {type: string}
+        - in: query
+          name: alertLevel
+          schema: {type: integer, minimum: 0, maximum: 4}
+        - in: query
+          name: bbox
+          description: minLon,minLat,maxLon,maxLat
+          schema: {type: string}
+      responses:
+        '200':
+          description: 検索結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/PondSummary'}
+  /ponds/{pondId}:
+    get:
+      summary: ため池詳細
+      parameters:
+        - {$ref: '#/components/parameters/PondId'}
+      responses:
+        '200':
+          description: 詳細
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pond'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /ponds/{pondId}/observations:
+    get:
+      summary: 観測時系列
+      parameters:
+        - {$ref: '#/components/parameters/PondId'}
+        - in: query
+          name: from
+          schema: {type: string, format: date-time}
+        - in: query
+          name: to
+          schema: {type: string, format: date-time}
+        - in: query
+          name: variable
+          schema: {type: string, enum: [water_level, rainfall, camera_status]}
+      responses:
+        '200':
+          description: 観測一覧
+  /alerts:
+    get:
+      summary: アラート一覧
+      responses:
+        '200': {description: OK}
+  /alerts/{alertId}/approve:
+    post:
+      summary: アラートを承認
+      security: [{oauth2: [alert.approve]}]
+      parameters:
+        - in: path
+          name: alertId
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [approved, rejected, needs_review]}
+                comment: {type: string}
+      responses:
+        '200': {description: Updated}
+  /analyses/satellite:
+    post:
+      summary: 衛星変化解析ジョブを開始
+      security: [{oauth2: [analysis.run]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pondIds, eventTime]
+              properties:
+                pondIds: {type: array, items: {type: string, format: uuid}}
+                eventTime: {type: string, format: date-time}
+                sensors: {type: array, items: {type: string, enum: [sentinel1, sentinel2, alos2, alos4, commercial]}}
+                baselineStrategy: {type: string, enum: [same_season, same_orbit, nearest_clear]}
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+  /analyses/{jobId}:
+    get:
+      summary: 解析ジョブ状態・結果
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: OK}
+  /simulations:
+    post:
+      summary: 浸水シミュレーションを開始
+      security: [{oauth2: [simulation.run]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SimulationRequest'}
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+  /simulations/{runId}:
+    get:
+      summary: シミュレーション結果
+      parameters:
+        - in: path
+          name: runId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: OK}
+  /reports:
+    post:
+      summary: 根拠付きレポートドラフトを生成
+      security: [{oauth2: [report.create]}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, template]
+              properties:
+                eventId: {type: string, format: uuid}
+                template: {type: string, enum: [situation_report, inspection_report, after_action_review]}
+                trustedSourcesOnly: {type: boolean, default: true}
+      responses:
+        '202': {description: Accepted}
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.example.jp/oauth2/authorize
+          tokenUrl: https://auth.example.jp/oauth2/token
+          scopes:
+            pond.read: ため池を閲覧
+            analysis.run: 衛星解析を実行
+            simulation.run: シミュレーションを実行
+            alert.approve: アラートを承認
+            report.create: レポートを生成
+  parameters:
+    PondId:
+      in: path
+      name: pondId
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    NotFound:
+      description: Resource not found
+  schemas:
+    PondSummary:
+      type: object
+      required: [pondId, name, location, quality]
+      properties:
+        pondId: {type: string, format: uuid}
+        name: {type: string}
+        municipalityCode: {type: string}
+        location: {$ref: '#/components/schemas/GeoPoint'}
+        alertLevel: {type: integer, minimum: 0, maximum: 4}
+        lastUpdatedAt: {type: string, format: date-time}
+        quality: {$ref: '#/components/schemas/Quality'}
+    Pond:
+      allOf:
+        - {$ref: '#/components/schemas/PondSummary'}
+        - type: object
+          properties:
+            damHeightM: {type: number}
+            crestLengthM: {type: number}
+            totalStorageThousandM3: {type: number}
+            fullWaterAreaKm2: {type: number}
+            source: {type: string}
+    GeoPoint:
+      type: object
+      required: [type, coordinates]
+      properties:
+        type: {const: Point}
+        coordinates:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: {type: number}
+    Quality:
+      type: object
+      properties:
+        flag: {type: string, enum: [verified, estimated, incomplete, invalid]}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        observedAt: {type: string, format: date-time}
+        processedAt: {type: string, format: date-time}
+    Job:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        createdAt: {type: string, format: date-time}
+    SimulationRequest:
+      type: object
+      required: [pondId, initialWaterLevelM, rainfallScenario]
+      properties:
+        pondId: {type: string, format: uuid}
+        initialWaterLevelM: {type: number}
+        rainfallScenario:
+          type: array
+          items:
+            type: object
+            required: [time, rainfallMmH]
+            properties:
+              time: {type: string, format: date-time}
+              rainfallMmH: {type: number, minimum: 0}
+        breachWidthM: {type: number, minimum: 0}
+        mode: {type: string, enum: [surrogate, detailed], default: surrogate}

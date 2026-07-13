@@ -1,0 +1,26 @@
+{
+  "project": "ため池レジリエンスAIプラットフォーム",
+  "codename": "Tameike Sentinel",
+  "created": "2026年7月13日",
+  "status": "draft-v0.9",
+  "documents": [
+    "01_コンペ提案書.docx",
+    "02_要件定義・システム仕様書.docx",
+    "03_データ_AI_シミュレーション設計書.docx",
+    "04_画面_API設計書.docx",
+    "05_試験_実証_運用設計書.docx",
+    "06_事業化計画_ロードマップ.docx"
+  ],
+  "developer_files": [
+    "openapi.yaml",
+    "database_schema.sql"
+  ],
+  "dataset": {
+    "file": "tameike_ichiranR8.xlsx",
+    "rows": 161846,
+    "columns": 14,
+    "full_water_area_missing": 12197,
+    "duplicate_coordinate_groups": 2587,
+    "duplicate_coordinate_records": 6875
+  }
+}
