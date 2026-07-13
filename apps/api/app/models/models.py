@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from geoalchemy2 import Geometry
 from app.db.session import Base
 
 def uid(): return str(uuid.uuid4())
@@ -20,6 +21,7 @@ class Pond(Base):
     normalized_name:Mapped[str|None]=mapped_column(String)
     prefecture:Mapped[str|None]=mapped_column(String); municipality:Mapped[str|None]=mapped_column(String); municipality_code:Mapped[str|None]=mapped_column(String)
     address:Mapped[str|None]=mapped_column(Text); latitude:Mapped[float|None]=mapped_column(Float); longitude:Mapped[float|None]=mapped_column(Float)
+    location:Mapped[object|None]=mapped_column(Geometry(geometry_type="POINT", srid=4326, spatial_index=False), nullable=True)
     coordinate_quality:Mapped[str]=mapped_column(String,default='unknown'); quality_flags:Mapped[dict]=mapped_column(json_type(),default=dict); duplicate_candidate:Mapped[bool]=mapped_column(Boolean,default=False)
     dam_height_m:Mapped[float|None]=mapped_column(Float); crest_length_m:Mapped[float|None]=mapped_column(Float); total_storage_thousand_m3:Mapped[float|None]=mapped_column(Float); full_water_area_km2:Mapped[float|None]=mapped_column(Float)
     source_payload:Mapped[dict]=mapped_column(json_type(),default=dict); normalized_payload:Mapped[dict]=mapped_column(json_type(),default=dict)
@@ -44,7 +46,16 @@ def _simple(cls, table, pkname, pond=True):
     attrs={'__tablename__':table, pkname:pk(pkname), 'created_at':mapped_column(DateTime(timezone=True),default=now), 'updated_at':mapped_column(DateTime(timezone=True),default=now), 'source_system':mapped_column(String), 'data_quality':mapped_column(String,default='unknown'), 'metadata_json':mapped_column('metadata', json_type(), default=dict)}
     if pond: attrs['pond_id']=mapped_column(ForeignKey('pond.pond_id'), index=True)
     return type(cls,(Base,),attrs)
-PondGeometry=_simple('PondGeometry','pond_geometry','pond_geometry_id')
+class PondGeometry(Base):
+    __tablename__='pond_geometry'
+    pond_geometry_id:Mapped[str]=pk('pond_geometry_id')
+    pond_id:Mapped[str]=mapped_column(ForeignKey('pond.pond_id'), index=True)
+    geometry_type:Mapped[str]=mapped_column(String, default='outline')
+    geom:Mapped[object|None]=mapped_column(Geometry(geometry_type='GEOMETRY', srid=4326, spatial_index=False), nullable=True)
+    source_system:Mapped[str|None]=mapped_column(String)
+    metadata_json:Mapped[dict]=mapped_column('metadata', json_type(), default=dict)
+    created_at:Mapped[datetime]=mapped_column(DateTime(timezone=True),default=now)
+
 Inspection=_simple('Inspection','inspection','inspection_id')
 Defect=_simple('Defect','defect','defect_id')
 Maintenance=_simple('Maintenance','maintenance','maintenance_id')

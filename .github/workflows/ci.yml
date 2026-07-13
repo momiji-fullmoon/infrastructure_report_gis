@@ -1,30 +1,38 @@
-name: CI
-on: [push, pull_request]
+name: ci
+on:
+  push:
+  pull_request:
 jobs:
   backend:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgis/postgis:16-3.4
-        env: { POSTGRES_USER: tameike, POSTGRES_PASSWORD: tameike, POSTGRES_DB: tameike }
+        env:
+          POSTGRES_USER: tameike
+          POSTGRES_PASSWORD: tameike
+          POSTGRES_DB: tameike
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U tameike -d tameike" --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "pg_isready -U tameike -d tameike"
+          --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - run: cd apps/api && pip install -e '.[dev]'
+        with: {python-version: '3.12'}
+      - run: cd apps/api && pip install -e .[dev]
       - run: cd apps/api && ruff check app tests
       - run: cd apps/api && pytest tests/test_api.py tests/test_risk.py tests/test_importer.py tests/test_bbox.py
+      - run: cd apps/api && DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike alembic upgrade head
       - run: cd apps/api && DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike pytest tests/test_postgis_integration.py
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: cd apps/web && npm install
+        with: {node-version: '22', cache: 'npm', cache-dependency-path: apps/web/package-lock.json}
+      - run: cd apps/web && npm ci
+      - run: cd apps/web && npm run typecheck
       - run: cd apps/web && npm run build
       - run: cd apps/web && npm test
   docker:
@@ -32,3 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose build
+      - run: docker compose up -d
+      - run: docker compose ps
+      - run: curl --fail http://localhost:8000/health
+      - run: curl --fail http://localhost:3000/
+      - if: always()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v

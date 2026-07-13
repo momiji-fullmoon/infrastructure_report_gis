@@ -1,0 +1,1 @@
+{"status":"not_run_in_this_environment","reason":"full PostGIS benchmark requires long-running docker import; dry-run validation artifacts are present","expectedOutput":"created by make import-ponds-full"}
