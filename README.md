@@ -66,3 +66,21 @@ python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --limit 1000
 ## リスク評価
 
 `hazard`、`vulnerability`、`exposure`、`anomaly`、`uncertainty` を0〜1に正規化し、設定可能な重みで合成します。これは「リスクスクリーニングスコア」であり、決壊確率ではありません。
+
+
+## PostGIS / Import / Frontend integration
+
+```bash
+git clone <repo>
+cd infrastructure_report_gis
+cp .env.example .env
+make up
+make migrate
+make seed
+make test-integration
+make import-ponds-full
+```
+
+Docker Compose starts `db -> migrate -> api -> web`. Development passwords in `.env.example` are local-only. Browser requests use `/api/backend` and Next.js rewrites them to `API_INTERNAL_URL`.
+
+Useful commands: `make migrate`, `make migrate-down`, `make seed`, `make import-ponds`, `make import-ponds-full`, `make test`, `make test-integration`, `make test-web`, `make e2e`, `make lint`, `make format`.

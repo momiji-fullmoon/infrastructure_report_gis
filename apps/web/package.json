@@ -1,1 +1,24 @@
-{"scripts":{"dev":"next dev -H 0.0.0.0","build":"next build","lint":"next lint","test":"echo component tests placeholder"},"dependencies":{"@tanstack/react-query":"latest","maplibre-gl":"latest","next":"latest","react":"latest","react-dom":"latest","recharts":"latest"},"devDependencies":{"@playwright/test":"latest","typescript":"latest","eslint":"latest","eslint-config-next":"latest"}}
+{
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "lint": "next lint",
+    "test": "echo frontend tests placeholder"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "latest",
+    "maplibre-gl": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "latest"
+  },
+  "devDependencies": {
+    "@playwright/test": "latest",
+    "typescript": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "@types/react": "latest",
+    "@types/node": "latest"
+  }
+}
