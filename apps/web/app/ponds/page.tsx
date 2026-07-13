@@ -1,0 +1,2 @@
+import {getJson} from '../../src/api';
+export default async function Ponds(){let data={items:[] as any[]};try{data=await getJson('/ponds?limit=100')}catch{}return <main className="card"><h1>ため池一覧</h1><table><tbody>{data.items.map((p:any)=><tr key={p.pondId}><td><a href={`/ponds/${p.pondId}`}>{p.name}</a></td><td>{p.prefecture}</td><td>{p.coordinateQuality}</td><td>{p.risk?.riskLevel||'未評価'}</td></tr>)}</tbody></table></main>}

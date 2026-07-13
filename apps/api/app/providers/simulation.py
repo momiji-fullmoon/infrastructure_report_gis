@@ -1,0 +1,9 @@
+from typing import Protocol
+class SimulationProvider(Protocol):
+    def submit_run(self,*args,**kwargs): ...
+    def get_status(self,*args,**kwargs): ...
+    def get_result(self,*args,**kwargs): ...
+class SampleSimulationProvider:
+    def submit_run(self,*a,**k): return {"status":"sample_mode","run_id":"sample"}
+    def get_status(self,*a,**k): return {"status":"available_sample"}
+    def get_result(self,*a,**k): return {"status":"available_sample","max_depth_m":1.2,"arrival_time_min":35,"geojson":{"type":"FeatureCollection","features":[]}}
