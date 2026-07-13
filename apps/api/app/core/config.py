@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     exposure_weight: float = 0.20
     anomaly_weight: float = 0.15
     uncertainty_weight: float = 0.10
+    cors_allowed_origins: str = "http://localhost:3000"
     class Config:
         env_file = ".env"
 settings = Settings()

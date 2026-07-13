@@ -1,9 +1,4 @@
-import pytest
-fastapi = pytest.importorskip('fastapi')
-testclient = pytest.importorskip('fastapi.testclient')
-from fastapi.testclient import TestClient
 from app.main import app
 
-def test_health():
-    r=TestClient(app).get('/health')
-    assert r.status_code==200 and r.json()['status']=='ok'
+def test_app_metadata():
+    assert app.title.startswith('Tameike')

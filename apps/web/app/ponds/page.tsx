@@ -1,2 +1,3 @@
-import {getJson} from '../../src/api';
-export default async function Ponds(){let data={items:[] as any[]};try{data=await getJson('/ponds?limit=100')}catch{}return <main className="card"><h1>ため池一覧</h1><table><tbody>{data.items.map((p:any)=><tr key={p.pondId}><td><a href={`/ponds/${p.pondId}`}>{p.name}</a></td><td>{p.prefecture}</td><td>{p.coordinateQuality}</td><td>{p.risk?.riskLevel||'未評価'}</td></tr>)}</tbody></table></main>}
+import {getJson, PondListResponse} from '../../src/api';
+import {ErrorPanel} from '../../src/ErrorPanel';
+export default async function Ponds(){try{const data=await getJson<PondListResponse>('/ponds?limit=100');return <main className="card"><h1>ため池一覧</h1><p>{data.total??data.count}件 / 最終更新とデータソースを各行に表示</p>{data.count===0?<p>0件</p>:<table><tbody>{data.items.map(p=><tr key={p.pondId}><td><a href={`/ponds/${p.pondId}`}>{p.name}</a></td><td>{p.prefecture}</td><td>{p.coordinateQuality}</td><td>{p.dataSource}</td><td>{p.risk?.riskLevel||'未評価'}</td></tr>)}</tbody></table>}</main>}catch(e){return <main className="card"><ErrorPanel error={e} feature="ため池一覧"/></main>}}

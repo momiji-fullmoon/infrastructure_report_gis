@@ -1,7 +1,6 @@
 # Assumptions
 
-- MVP は未接続の衛星 API・物理シミュレータ・認証基盤を実装済みと見せず、状態値として `not_configured` を返す。
-- 開発・テストでは SQLite でも起動可能にし、本番相当は PostgreSQL/PostGIS を Docker Compose で利用する。
-- ため池台帳 Excel の列名揺れを吸収するため、代表的な日本語列名候補をマッピングし、未検出列は `source_payload` に保持する。
-- リスクスコアは「決壊確率」ではなく「リスクスクリーニングスコア」と表示する。
-- 住所・自治体コードの完全な正規化辞書は今後連携し、MVPでは空白除去・都道府県接尾辞補正に限定する。
+- PostgreSQL/PostGISを本番相当の基準とし、SQLiteは軽量単体テスト用途に限定する。
+- 衛星Providerは未設定、シミュレーションProviderはサンプルモードとして明示する。
+- `latitude` / `longitude` は移行期の互換カラムで、空間検索は `location` を正とする。
+- フルインポートはローカル手動ベンチマーク対象で、通常CIでは小規模Excelを使う。

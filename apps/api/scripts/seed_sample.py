@@ -1,8 +1,7 @@
 from datetime import datetime, timezone, timedelta
-from app.db.session import Base, engine, SessionLocal
+from app.db.session import SessionLocal
 from app.models.models import Pond, Observation, DisasterEvent
 from app.services.risk import assess_pond
-Base.metadata.create_all(engine)
 with SessionLocal() as db:
     if not db.query(Pond).first():
         for i in range(20):

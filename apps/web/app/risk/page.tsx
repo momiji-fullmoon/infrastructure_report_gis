@@ -1,1 +1,3 @@
-export default function Page(){return <main className="card"><h1>MVP画面</h1><p>災害イベント、リスクランキング、点検タスク、報告書、台帳インポート、データ品質を管理します。</p><div className="warn">未接続データや解析失敗は実績として偽装しません。</div></main>}
+import {getJson} from '../../src/api';
+import {ErrorPanel} from '../../src/ErrorPanel';
+export default async function Page(){try{const data=await getJson<any>('/ponds?limit=100');return <main className="card"><h1>リスクランキング</h1><p>{data.count}件</p>{data.items.map((p:any)=><p key={p.pondId}>{p.name}: {p.risk?.riskLevel||'未評価'}</p>)}</main>}catch(e){return <main className="card"><ErrorPanel error={e} feature="リスク"/></main>}}
