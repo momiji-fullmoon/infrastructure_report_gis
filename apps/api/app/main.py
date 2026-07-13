@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -42,24 +43,24 @@ def health(db:Session=Depends(get_db)):
         else: out['postgis']='not_applicable_sqlite_unit_tests'
     except Exception:
         out['status']='error'; out['database']='error'; out['postgis']='error'
+        return JSONResponse(out, status_code=503)
     return out
 
 @app.get('/ponds')
 def ponds(prefecture:str|None=None, municipality:str|None=None, risk_level:str|None=None, bbox:str|None=None, limit:int=Query(100, ge=1, le=5000), cursor:int=Query(0, ge=0), db:Session=Depends(get_db)):
     lon_e, lat_e = coords_expr(db)
-    stmt=select(Pond, lon_e.label('lon'), lat_e.label('lat'))
+    latest = select(RiskAssessment.pond_id, func.max(RiskAssessment.assessed_at).label('assessed_at')).group_by(RiskAssessment.pond_id).subquery()
+    stmt=select(Pond, lon_e.label('lon'), lat_e.label('lat'), RiskAssessment).outerjoin(latest, latest.c.pond_id==Pond.pond_id).outerjoin(RiskAssessment, (RiskAssessment.pond_id==latest.c.pond_id) & (RiskAssessment.assessed_at==latest.c.assessed_at))
     if prefecture: stmt=stmt.where(Pond.prefecture==prefecture)
     if municipality: stmt=stmt.where(Pond.municipality==municipality)
+    if risk_level: stmt=stmt.where(RiskAssessment.risk_level==risk_level)
     if bbox:
         minx,miny,maxx,maxy=parse_bbox(bbox)
         if _is_pg(db): stmt=stmt.where(text('ST_Intersects(pond.location, ST_MakeEnvelope(:minx,:miny,:maxx,:maxy,4326))')).params(minx=minx,miny=miny,maxx=maxx,maxy=maxy)
         else: stmt=stmt.where(Pond.longitude>=minx,Pond.longitude<=maxx,Pond.latitude>=miny,Pond.latitude<=maxy)
     total=db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows=db.execute(stmt.order_by(Pond.pond_id).offset(cursor).limit(limit)).all(); out=[]
-    for p,lon,lat in rows:
-        r=db.scalars(select(RiskAssessment).where(RiskAssessment.pond_id==p.pond_id).order_by(RiskAssessment.assessed_at.desc())).first()
-        if risk_level and (not r or r.risk_level!=risk_level): continue
-        out.append(pond_dict(p,lon,lat,r))
+    rows=db.execute(stmt.order_by(Pond.pond_id).offset(cursor).limit(limit)).all()
+    out=[pond_dict(p,lon,lat,r) for p,lon,lat,r in rows]
     return {'items':out,'count':len(out),'nextCursor':cursor+len(rows) if cursor+len(rows)<total else None,'total':total,'dataSource':'ため池台帳+MVP baseline','modelVersion':'baseline-screening-v0.1'}
 @app.get('/ponds/{pond_id}')
 def pond(pond_id:str, db:Session=Depends(get_db)):

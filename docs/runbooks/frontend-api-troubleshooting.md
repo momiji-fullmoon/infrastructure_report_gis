@@ -1,8 +1,3 @@
-# Frontend API troubleshooting
+# Frontend/API troubleshooting
 
-- サーバー側URL: `API_INTERNAL_URL`（Dockerでは `http://api:8000`）
-- ブラウザ側URL: `NEXT_PUBLIC_API_URL`（通常 `/api/backend`）
-- Next.js rewrite: `/api/backend/:path* -> ${API_INTERNAL_URL}/:path*`
-- FastAPI CORS: `CORS_ALLOWED_ORIGINS=http://localhost:3000`
-
-画面はAPI停止、タイムアウト、4xx、5xx、不正JSON、0件を区別する。一般利用者へDBエラー全文やスタックトレースは表示しない。
+Browsers call `NEXT_PUBLIC_API_URL=/api/backend`; Next.js proxies to `API_INTERNAL_URL=http://api:8000` inside Docker. Error UI distinguishes loading, zero results, network/timeout, HTTP 4xx/5xx, and invalid JSON. Retry links reload the affected route, while the MapLibre component retries BBox requests in-place.

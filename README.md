@@ -84,3 +84,18 @@ make import-ponds-full
 Docker Compose starts `db -> migrate -> api -> web`. Development passwords in `.env.example` are local-only. Browser requests use `/api/backend` and Next.js rewrites them to `API_INTERNAL_URL`.
 
 Useful commands: `make migrate`, `make migrate-down`, `make seed`, `make import-ponds`, `make import-ponds-full`, `make test`, `make test-integration`, `make test-web`, `make e2e`, `make lint`, `make format`.
+
+
+## Empty-environment startup
+
+```bash
+git clone <repo-url>
+cd infrastructure_report_gis
+cp .env.example .env
+docker compose down -v
+docker compose up --build
+make seed
+make import-ponds-full
+```
+
+The importer expects the real R8 Excel ledger columns exactly as documented in `docs/decisions/0004-real-excel-schema.md`. Spatial schema changes are managed by Alembic only; application startup does not create tables implicitly.
