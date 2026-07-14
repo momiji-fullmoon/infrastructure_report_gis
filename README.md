@@ -2,7 +2,34 @@
 
 NEDO Space Data Challenge「テーマ2：インフラに係る防災・災害対応」向けのMVPです。衛星データ、ため池台帳、地形、気象、AI、物理シミュレーションを統合する将来構成を前提に、現時点では台帳取り込み、地図検索、詳細、災害イベント、説明可能なリスクスクリーニングを実装しています。
 
-## 推奨起動手順（空DB）
+## Docker なしのローカル起動手順（SQLite）
+
+Docker を使わずに、ホスト上の Python / Node.js だけで API と Web UI を起動できます。この手順では `apps/api/tameike.db` の SQLite DB を作成し、サンプルデータを投入します。
+
+```bash
+git clone https://github.com/momiji-fullmoon/infrastructure_report_gis.git
+cd infrastructure_report_gis
+make setup-local
+```
+
+API と Web UI は別々のターミナルで起動してください。
+
+```bash
+make api-local
+```
+
+```bash
+make web-local
+```
+
+- Web UI: http://localhost:3000
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- ローカル SQLite DB: `apps/api/tameike.db`
+
+SQLite 起動では PostGIS カラムを通常のテキストカラムとして作成し、緯度経度カラムで地図検索します。本番相当の PostGIS 動作確認は Docker Compose または外部 PostgreSQL/PostGIS を使ってください。
+
+## Docker Compose 推奨起動手順（空DB）
 
 Docker Compose は `.env` を読み込みます。`.env.example` はテンプレート専用です。
 
@@ -88,7 +115,7 @@ python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --limit 1000
 
 ### Local development
 
-Docker Compose remains the local path: PostGIS container, FastAPI container, and Next.js container. Use `make up`, `make migrate`, and `make seed` (`seed-docker`) for container-based data loading. Use `make seed-host` only when intentionally writing from the host to a configured PostGIS database.
+For Docker-free local development, use `make setup-local`, then run `make api-local` and `make web-local` in separate terminals. This path uses SQLite at `apps/api/tameike.db` and sample data. Docker Compose remains available for PostGIS parity: PostGIS container, FastAPI container, and Next.js container. Use `make up`, `make migrate`, and `make seed` (`seed-docker`) for container-based data loading. Use `make seed-host` only when intentionally writing from the host to a configured PostGIS database.
 
 ### Cloudflare architecture
 
