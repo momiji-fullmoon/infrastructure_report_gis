@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     anomaly_weight: float = 0.15
     uncertainty_weight: float = 0.10
     cors_allowed_origins: str = "http://localhost:3000"
+    db_pool_size: int = 3
+    db_max_overflow: int = 2
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
     class Config:
         env_file = ".env"
 settings = Settings()

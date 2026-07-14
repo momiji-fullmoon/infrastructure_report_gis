@@ -1,7 +1,9 @@
-from fastapi import Depends, FastAPI, HTTPException, Query
+import os
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pathlib import Path
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import func, select, text
@@ -15,7 +17,41 @@ from app.providers.simulation import SampleSimulationProvider
 
 app = FastAPI(title='Tameike Resilience AI / Satellite PondWatch', version='0.2.0')
 origins=[o.strip() for o in getattr(settings,'cors_allowed_origins','http://localhost:3000').split(',') if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=['GET','POST','PUT','PATCH','DELETE','OPTIONS'], allow_headers=['authorization','content-type'])
+
+MUTATING_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
+MUTATING_PATHS = ('/disaster-events', '/risk-assessments/run', '/reports/generate')
+
+
+def resolve_alembic_ini() -> Path:
+    configured = os.getenv('ALEMBIC_INI_PATH')
+    if configured:
+        return Path(configured).resolve()
+    candidate = Path(__file__).resolve().parents[1] / 'alembic.ini'
+    if not candidate.exists():
+        raise FileNotFoundError(f'alembic.ini not found: {candidate}')
+    return candidate
+
+
+def is_mutating_api(method: str, path: str) -> bool:
+    if method.upper() in {'PUT', 'PATCH', 'DELETE'}:
+        return True
+    return method.upper() == 'POST' and any(path == p or path.startswith(f'{p}/') for p in MUTATING_PATHS)
+
+
+@app.middleware('http')
+async def mutation_guard(request: Request, call_next):
+    if is_mutating_api(request.method, request.url.path):
+        if os.getenv('ALLOW_MUTATIONS', 'false').lower() != 'true':
+            return JSONResponse({'detail': 'Mutating API is disabled in production'}, status_code=403)
+        expected = os.getenv('ADMIN_API_TOKEN')
+        if expected and request.headers.get('authorization') != f'Bearer {expected}':
+            return JSONResponse({'detail': 'Unauthorized'}, status_code=401)
+    response = await call_next(request)
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+    return response
 
 def _is_pg(db): return db.bind.dialect.name == 'postgresql'
 def coords_expr(db):
@@ -38,15 +74,19 @@ def pond_dict(p, lon=None, lat=None, risk=None):
     lon = p.longitude if lon is None else lon; lat = p.latitude if lat is None else lat
     return {'pondId':p.pond_id,'name':p.name,'prefecture':p.prefecture,'municipality':p.municipality,'municipalityCode':p.municipality_code,'location':{'type':'Point','coordinates':[lon,lat]} if lat is not None and lon is not None else None,'coordinateQuality':p.coordinate_quality,'qualityFlags':p.quality_flags,'duplicateCandidate':p.duplicate_candidate,'damHeightM':p.dam_height_m,'crestLengthM':p.crest_length_m,'totalStorageThousandM3':p.total_storage_thousand_m3,'dataSource':p.data_source,'lastUpdatedAt':p.updated_at,'confidence':p.confidence,'risk':risk_dict(risk) if risk else None}
 
-@app.get('/health')
-def health(db:Session=Depends(get_db)):
+@app.get('/health/live')
+def health_live():
+    return {'status': 'ok'}
+
+
+def readiness(db: Session):
     out={'status':'ok','database':'unknown','postgis':'unknown','migration':'unknown','satellite':'not_configured','simulation':'sample_mode'}
     try:
         db.execute(text('select 1')); out['database']='ok'
         if _is_pg(db):
             db.execute(text('select PostGIS_Version()')); out['postgis']='ok'
             current=db.scalar(text('select version_num from alembic_version limit 1'))
-            alembic_ini = Path(__file__).resolve().parents[2] / 'alembic.ini'
+            alembic_ini = resolve_alembic_ini()
             config = Config(str(alembic_ini))
             config.set_main_option('script_location', str(alembic_ini.parent / 'alembic'))
             script_head = ScriptDirectory.from_config(config).get_current_head()
@@ -58,6 +98,16 @@ def health(db:Session=Depends(get_db)):
         out['status']='error'; out['database']='error'; out['postgis']='error'
         return JSONResponse(out, status_code=503)
     return out
+
+
+@app.get('/health/ready')
+def health_ready(db:Session=Depends(get_db)):
+    return readiness(db)
+
+
+@app.get('/health')
+def health(db:Session=Depends(get_db)):
+    return readiness(db)
 
 @app.get('/ponds')
 def ponds(prefecture:str|None=None, municipality:str|None=None, risk_level:str|None=None, bbox:str|None=None, limit:int=Query(100, ge=1, le=5000), cursor:int=Query(0, ge=0), db:Session=Depends(get_db)):

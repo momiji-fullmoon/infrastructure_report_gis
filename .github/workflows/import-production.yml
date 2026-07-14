@@ -1,0 +1,27 @@
+name: Import production ledger
+on:
+  workflow_dispatch:
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install awscli && cd apps/api && python -m pip install .
+      - run: mkdir -p artifacts && ./scripts/r2_download_ledger.sh ./tameike_ichiranR8.xlsx
+        env: { AWS_ACCESS_KEY_ID: '${{ secrets.R2_ACCESS_KEY_ID }}', AWS_SECRET_ACCESS_KEY: '${{ secrets.R2_SECRET_ACCESS_KEY }}', R2_ENDPOINT: '${{ secrets.R2_ENDPOINT }}', R2_BUCKET: '${{ secrets.R2_BUCKET }}' }
+      - run: sha256sum tameike_ichiranR8.xlsx | tee artifacts/ledger.sha256
+      - run: cd apps/api && DATABASE_URL="$DATABASE_URL" python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode dry-run --limit 1000 --batch-size 1000 --report ../../artifacts/import-1000-dry-run.json
+        env: { DATABASE_URL: '${{ secrets.DATABASE_URL }}' }
+      - run: cd apps/api && DATABASE_URL="$DATABASE_URL" python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --limit 1000 --batch-size 1000 --report ../../artifacts/import-1000.json
+        env: { DATABASE_URL: '${{ secrets.DATABASE_URL }}' }
+      - run: cd apps/api && DATABASE_URL="$DATABASE_URL" python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --limit 10000 --batch-size 5000 --report ../../artifacts/import-10000.json
+        env: { DATABASE_URL: '${{ secrets.DATABASE_URL }}' }
+      - run: cd apps/api && DATABASE_URL="$DATABASE_URL" python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report ../../artifacts/import-full.json && DATABASE_URL="$DATABASE_URL" python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report ../../artifacts/import-rerun.json
+        env: { DATABASE_URL: '${{ secrets.DATABASE_URL }}' }
+      - uses: actions/upload-artifact@v4
+        with: { name: production-import-results, path: artifacts/ }
+      - run: for f in artifacts/*.json artifacts/*.sha256; do ./scripts/r2_upload_import_results.sh "$f" "imports/$(basename "$f")"; done
+        env: { AWS_ACCESS_KEY_ID: '${{ secrets.R2_ACCESS_KEY_ID }}', AWS_SECRET_ACCESS_KEY: '${{ secrets.R2_SECRET_ACCESS_KEY }}', R2_ENDPOINT: '${{ secrets.R2_ENDPOINT }}', R2_BUCKET: '${{ secrets.R2_BUCKET }}' }

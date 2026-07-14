@@ -6,7 +6,7 @@ export type DisasterEvent={eventId:string; name:string; eventType:string; occurr
 export type ApiHealth={status:string; database:string; postgis:string; satellite:string; simulation:string};
 export class ApiError extends Error{status?:number; endpoint:string; requestId?:string; detail?:unknown; kind:string; occurredAt:string; constructor(message:string, endpoint:string, init:Partial<ApiError>={}){super(message); this.name='ApiError'; this.endpoint=endpoint; this.occurredAt=new Date().toISOString(); this.kind=init.kind||'api_error'; Object.assign(this, init);}}
 export const browserBase=process.env.NEXT_PUBLIC_API_URL||'/api/backend';
-export const serverBase=process.env.API_INTERNAL_URL||browserBase||'http://localhost:8000';
+export const serverBase=process.env.API_INTERNAL_URL||'http://localhost:8000';
 export function apiBase(){return typeof window==='undefined'?serverBase:browserBase;}
 export async function getJson<T=unknown>(path:string, opts:{timeoutMs?:number; signal?:AbortSignal}={}):Promise<T>{
  const endpoint=apiBase()+path; const ctrl=new AbortController(); const timeout=setTimeout(()=>ctrl.abort('timeout'), opts.timeoutMs??8000);

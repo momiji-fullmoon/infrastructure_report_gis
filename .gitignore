@@ -6,3 +6,9 @@ node_modules/
 .next/
 tameike.db
 .pytest_cache/
+.dev.vars
+.wrangler/
+**/.dev.vars
+**/.wrangler/
+*.local
+artifacts/
