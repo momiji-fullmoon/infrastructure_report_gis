@@ -1,4 +1,4 @@
-from app.services.importer import REAL_COLUMNS, build_record, dms_to_decimal
+from app.services.importer import REAL_COLUMNS, build_record, dms_to_decimal, issue_codes
 
 
 def real_row(**overrides):
@@ -40,6 +40,19 @@ def test_real_excel_columns_dms_and_payload():
 def test_sentinel_full_width_and_swapped_candidate():
     rec=build_record(real_row(**{"満水面積(km2)":"９９９９．９", "緯度":"139", "分":"48", "秒":"0", "経度":"36", "分2":"30", "秒2":"0"}), 3)
     assert rec["full_water_area_km2"] is None
-    assert "sentinel_missing_value" in rec["quality_flags"]["issues"]
-    assert "missing_full_water_area" in rec["quality_flags"]["issues"]
-    assert "coordinate_swapped_candidate" in rec["quality_flags"]["issues"]
+    assert "sentinel_missing_value" in issue_codes(rec["quality_flags"]["issues"])
+    assert "missing_full_water_area" in issue_codes(rec["quality_flags"]["issues"])
+    assert "coordinate_swapped_candidate" in issue_codes(rec["quality_flags"]["issues"])
+
+
+def test_dms_zero_minutes_seconds_and_invalid_values():
+    flags=[]
+    assert dms_to_decimal("35", "0", "0", flags, "latitude") == 35.0
+    assert "sentinel_missing_value" not in issue_codes(flags)
+    assert dms_to_decimal("35", "30", "0", [], "latitude") == 35.5
+    flags=[]; assert dms_to_decimal("0", "30", "0", flags, "latitude") is None; assert "invalid_degree" in issue_codes(flags)
+    flags=[]; assert dms_to_decimal("35", "60", "0", flags, "latitude") is None; assert "invalid_minute" in issue_codes(flags)
+    flags=[]; assert dms_to_decimal("35", "0", "60", flags, "latitude") is None; assert "invalid_second" in issue_codes(flags)
+    flags=[]; assert dms_to_decimal("9999", "0", "0", flags, "latitude") is None; assert "sentinel_missing_value" in issue_codes(flags)
+    flags=[]; assert dms_to_decimal("35", "9999", "0", flags, "latitude") is None; assert "sentinel_missing_value" in issue_codes(flags)
+    flags=[]; assert dms_to_decimal("35", "0", "9999.9", flags, "latitude") is None; assert "sentinel_missing_value" in issue_codes(flags)

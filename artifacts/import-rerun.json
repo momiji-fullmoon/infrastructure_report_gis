@@ -1,1 +1,6 @@
-{"status":"not_run_in_this_environment","reason":"rerun benchmark follows full import and verifies idempotent row count","expectedOutput":"created by second make import-ponds-full"}
+{
+  "status": "not_completed",
+  "reason": "Requires the full PostGIS import to complete first; local environment has no docker binary/PostGIS service.",
+  "reproduce": "cd apps/api && DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report ../../artifacts/import-rerun.json",
+  "expectedIfUnchanged": {"inserted": 0, "updated": 0, "skipped": "Excel data rows", "failed": 0}
+}

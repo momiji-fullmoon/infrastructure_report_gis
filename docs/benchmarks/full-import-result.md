@@ -1,10 +1,33 @@
-# Full import benchmark
+# Full import result
 
-This branch includes reproducible benchmark artifacts. In this execution environment, the real ledger was verified with 100-row and 1,000-row dry-runs before database writes.
+Status: **not completed in this local environment**.
 
-| run | processed | inserted | updated | skipped | failed | missing coordinates | duplicate candidates | elapsed | rows/sec | peak memory |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| dry-run 100 | 100 | 0 | 0 | 100 | 0 | 1 | 0 | 16.349s | 6.12 | 41,121,522 bytes |
-| dry-run 1,000 | 1,000 | 0 | 0 | 1,000 | 0 | 1 | 4 | 16.411s | 60.93 | 41,141,691 bytes |
+## Why
 
-Full PostGIS import commands are documented in `docs/runbooks/full-import.md` and write `artifacts/import-full.json` and `artifacts/import-rerun.json`.
+The local runner does not provide the `docker` command, so a PostGIS-backed Docker Compose stack could not be started for the required 1,000 / 10,000 / full upsert and rerun checks. Package download commands were also blocked by a 403 proxy for npm/pip registries.
+
+## Completed local measurements
+
+- `cd apps/api && python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode dry-run --limit 100 --batch-size 100 --report ../../artifacts/import-dryrun-100.json`
+- `cd apps/api && python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode dry-run --limit 1000 --batch-size 1000 --report ../../artifacts/import-dryrun-1000.json`
+
+See `artifacts/import-dryrun-100.json` and `artifacts/import-dryrun-1000.json` for measured rows/sec, memory, duplicate and coordinate-quality counts.
+
+## Reproduction commands for the missing PostGIS measurements
+
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+cd apps/api
+DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike alembic upgrade head
+DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report ../../artifacts/import-full.json
+DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report ../../artifacts/import-rerun.json
+```
+
+## Unmet acceptance conditions
+
+- Full 161,846-row PostGIS upsert.
+- Same-file rerun idempotency on PostGIS.
+- Post-import quality SQL aggregation on PostGIS.
+- Remote GitHub Actions success confirmation.
