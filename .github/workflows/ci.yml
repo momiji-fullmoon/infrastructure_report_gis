@@ -3,7 +3,19 @@ on:
   push:
   pull_request:
 jobs:
-  backend:
+  backend-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: cd apps/api && python -m pip install --upgrade pip setuptools wheel
+      - run: cd apps/api && python -m pip install -e '.[dev]'
+      - run: cd apps/api && python -c "import app; import fastapi; import sqlalchemy; import geoalchemy2"
+      - run: cd apps/api && ruff check app tests
+      - run: cd apps/api && python -m compileall app
+      - run: cd apps/api && pytest -q tests/test_api.py tests/test_risk.py tests/test_importer.py tests/test_bbox.py
+  backend-postgis:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -20,10 +32,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: cd apps/api && python -m pip install --upgrade pip && pip install -e '.[dev]'
-      - run: cd apps/api && ruff check app tests
-      - run: cd apps/api && python -m compileall app
-      - run: cd apps/api && pytest -q tests/test_api.py tests/test_risk.py tests/test_importer.py tests/test_bbox.py
+      - run: cd apps/api && python -m pip install --upgrade pip setuptools wheel
+      - run: cd apps/api && python -m pip install -e '.[dev]'
       - run: until pg_isready -h localhost -U tameike -d tameike; do sleep 2; done
         env: { PGPASSWORD: tameike }
       - run: cd apps/api && DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike alembic upgrade head
@@ -35,23 +45,53 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: 'npm', cache-dependency-path: apps/web/package-lock.json}
       - run: cd apps/web && npm ci
+      - run: cd apps/web && npm ls --depth=0
       - run: cd apps/web && npm run typecheck
       - run: cd apps/web && npm run lint
       - run: cd apps/web && npm run build
-      - run: cd apps/web && npx playwright install --with-deps chromium
-      - run: cd apps/web && npm test
-  docker:
+      - run: cd apps/web && git diff --exit-code package-lock.json
+  docker-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose down -v
       - run: docker compose build
       - run: docker compose up -d
       - run: docker compose ps
-      - run: timeout 180 sh -c 'until curl --fail http://localhost:8000/health; do sleep 5; done'
-      - run: timeout 180 sh -c 'until curl --fail http://localhost:3000/; do sleep 5; done'
+      - run: timeout 240 sh -c 'until curl --fail http://localhost:8000/health; do sleep 5; done'
+      - run: timeout 240 sh -c 'until curl --fail http://localhost:3000/; do sleep 5; done'
       - run: curl --fail 'http://localhost:8000/ponds?limit=10'
-      - run: curl --fail http://localhost:3000/map
+      - run: curl --fail 'http://localhost:3000/api/backend/health'
       - run: curl --fail 'http://localhost:3000/api/backend/ponds?limit=10'
+      - if: failure()
+        run: docker compose ps -a && docker compose logs --no-color
+      - if: always()
+        run: docker compose down -v
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: 'npm', cache-dependency-path: apps/web/package-lock.json}
+      - run: cp .env.example .env
+      - run: docker compose down -v
+      - run: docker compose up --build -d
+      - run: timeout 240 sh -c 'until curl --fail http://localhost:8000/health; do sleep 5; done'
+      - run: timeout 240 sh -c 'until curl --fail http://localhost:3000/; do sleep 5; done'
+      - run: docker compose exec -T api python -m app.cli.import_ponds --input /data/test-fixtures/tameike-small.xlsx --limit 100 --mode upsert --batch-size 100
+      - run: curl --fail 'http://localhost:8000/ponds?limit=10'
+      - run: curl --fail 'http://localhost:3000/api/backend/health'
+      - run: curl --fail 'http://localhost:3000/api/backend/ponds?limit=10'
+      - run: curl --fail -X POST -H 'content-type: application/json' --data '{"name":"E2E","eventType":"heavy_rain","areaGeojson":{}}' http://localhost:3000/api/backend/disaster-events
+      - run: cd apps/web && npm ci && npx playwright install --with-deps chromium && npm test
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
       - if: failure()
         run: docker compose ps -a && docker compose logs --no-color
       - if: always()

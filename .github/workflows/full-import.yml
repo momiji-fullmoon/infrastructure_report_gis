@@ -1,0 +1,39 @@
+name: full-import
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Import row limit. Empty means full dataset.
+        required: false
+      mode:
+        type: choice
+        options: [upsert, insert, replace-source]
+        default: upsert
+jobs:
+  full-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: {lfs: true}
+      - run: cp .env.example .env
+      - run: docker compose up --build -d db migrate api
+      - run: timeout 240 sh -c 'until curl --fail http://localhost:8000/health; do sleep 5; done'
+      - run: mkdir -p artifacts
+      - name: Verify workbook exists
+        run: test -f tameike_ichiranR8.xlsx || { echo 'Real workbook tameike_ichiranR8.xlsx is missing; cannot perform full import.'; exit 1; }
+      - run: docker compose exec -T api python -m app.cli.import_ponds --input /data/tameike_ichiranR8.xlsx --limit 1000 --mode ${{ inputs.mode }} --batch-size 5000 --report /tmp/import-1000.json
+      - run: docker compose cp api:/tmp/import-1000.json artifacts/import-1000.json
+      - run: docker compose exec -T api python -m app.cli.import_ponds --input /data/tameike_ichiranR8.xlsx --limit 10000 --mode upsert --batch-size 5000 --report /tmp/import-10000.json
+      - run: docker compose cp api:/tmp/import-10000.json artifacts/import-10000.json
+      - run: docker compose exec -T api python -m app.cli.import_ponds --input /data/tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report /tmp/import-full.json
+      - run: docker compose cp api:/tmp/import-full.json artifacts/import-full.json
+      - run: docker compose exec -T api python -m app.cli.import_ponds --input /data/tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report /tmp/import-rerun.json
+      - run: docker compose cp api:/tmp/import-rerun.json artifacts/import-rerun.json
+      - run: cp artifacts/import-full.json artifacts/import-quality-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-import-artifacts
+          path: artifacts/import-*.json
+      - if: always()
+        run: docker compose down -v
