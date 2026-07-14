@@ -1,1 +1,12 @@
-{"status":"not_run_in_this_environment","reason":"full PostGIS benchmark requires long-running docker import; dry-run validation artifacts are present","expectedOutput":"created by make import-ponds-full"}
+{
+  "status": "not_completed",
+  "reason": "Local environment has no docker binary, so PostGIS upsert/full import could not be executed here. npm/pip network access is also blocked by a 403 proxy for package downloads.",
+  "maxExecutedLocally": "1000-row dry-run",
+  "completedConditions": ["100-row dry-run", "1000-row dry-run", "backend unit tests"],
+  "missingConditions": ["1000-row PostGIS upsert", "10000-row PostGIS upsert", "full PostGIS upsert", "same-file rerun against PostGIS", "Docker Compose health verification", "GitHub Actions remote confirmation"],
+  "reproduce": [
+    "docker compose down -v && docker compose build --no-cache && docker compose up -d",
+    "cd apps/api && DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 5000 --report ../../artifacts/import-full.json"
+  ],
+  "dryRun1000Artifact": "artifacts/import-dryrun-1000.json"
+}

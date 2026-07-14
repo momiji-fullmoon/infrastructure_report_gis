@@ -16,7 +16,8 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True
 
 def _is_pg(db): return db.bind.dialect.name == 'postgresql'
 def coords_expr(db):
-    if _is_pg(db): return func.ST_X(Pond.__table__.c.location), func.ST_Y(Pond.__table__.c.location)
+    if _is_pg(db):
+        return func.coalesce(func.ST_X(Pond.__table__.c.location), Pond.longitude), func.coalesce(func.ST_Y(Pond.__table__.c.location), Pond.latitude)
     return Pond.longitude, Pond.latitude
 
 def parse_bbox(bbox):
@@ -36,11 +37,17 @@ def pond_dict(p, lon=None, lat=None, risk=None):
 
 @app.get('/health')
 def health(db:Session=Depends(get_db)):
-    out={'status':'ok','database':'unknown','postgis':'unknown','satellite':'not_configured','simulation':'sample_mode'}
+    out={'status':'ok','database':'unknown','postgis':'unknown','migration':'unknown','satellite':'not_configured','simulation':'sample_mode'}
     try:
         db.execute(text('select 1')); out['database']='ok'
-        if _is_pg(db): db.execute(text('select PostGIS_Version()')); out['postgis']='ok'
-        else: out['postgis']='not_applicable_sqlite_unit_tests'
+        if _is_pg(db):
+            db.execute(text('select PostGIS_Version()')); out['postgis']='ok'
+            current=db.scalar(text('select version_num from alembic_version limit 1'))
+            script_head='0001_initial_postgis'
+            out['migration']='head' if current==script_head else f'not_head:{current}'
+            if current != script_head: out['status']='error'; return JSONResponse(out, status_code=503)
+        else:
+            out['postgis']='not_applicable_sqlite_unit_tests'; out['migration']='not_applicable_sqlite_unit_tests'
     except Exception:
         out['status']='error'; out['database']='error'; out['postgis']='error'
         return JSONResponse(out, status_code=503)
@@ -64,9 +71,11 @@ def ponds(prefecture:str|None=None, municipality:str|None=None, risk_level:str|N
     return {'items':out,'count':len(out),'nextCursor':cursor+len(rows) if cursor+len(rows)<total else None,'total':total,'dataSource':'ため池台帳+MVP baseline','modelVersion':'baseline-screening-v0.1'}
 @app.get('/ponds/{pond_id}')
 def pond(pond_id:str, db:Session=Depends(get_db)):
-    p=db.get(Pond, pond_id)
-    if not p: raise HTTPException(404,'pond not found')
-    r=db.scalars(select(RiskAssessment).where(RiskAssessment.pond_id==pond_id).order_by(RiskAssessment.assessed_at.desc())).first(); return pond_dict(p,risk=r)
+    lon_e, lat_e = coords_expr(db)
+    row=db.execute(select(Pond, lon_e.label('lon'), lat_e.label('lat')).where(Pond.pond_id==pond_id)).first()
+    if not row: raise HTTPException(404,'pond not found')
+    p, lon, lat = row
+    r=db.scalars(select(RiskAssessment).where(RiskAssessment.pond_id==pond_id).order_by(RiskAssessment.assessed_at.desc())).first(); return pond_dict(p,lon,lat,r)
 @app.get('/ponds/{pond_id}/risk')
 def pond_risk(pond_id:str, db:Session=Depends(get_db)):
     p=db.get(Pond, pond_id)
