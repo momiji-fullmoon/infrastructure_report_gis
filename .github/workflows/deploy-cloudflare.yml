@@ -1,0 +1,88 @@
+name: Deploy Cloudflare production
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env: { POSTGRES_USER: tameike, POSTGRES_PASSWORD: tameike, POSTGRES_DB: tameike }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tameike -d tameike" --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: 'apps/web/package-lock.json' }
+      - run: cd apps/api && python -m pip install -e '.[dev]'
+      - run: cd apps/api && pytest -q tests/test_api.py tests/test_risk.py tests/test_importer.py tests/test_bbox.py
+      - run: cd apps/api && DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike pytest -q tests/test_postgis_integration.py
+      - run: cd apps/web && npm ci && npm run typecheck && npm run lint && npm run build
+      - run: cd apps/web && npm run cf:build
+      - run: docker buildx build --platform linux/amd64 -f apps/api/Dockerfile.cloudflare -t tameike-api-cloudflare:test --load apps/api
+      - run: cd deploy/cloudflare/api && npm ci && npx wrangler deploy --dry-run
+  migration:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: cd apps/api && python -m pip install .
+      - run: cd apps/api && DATABASE_URL="$DATABASE_URL" alembic current && DATABASE_URL="$DATABASE_URL" alembic upgrade head && DATABASE_URL="$DATABASE_URL" alembic current
+        env: { DATABASE_URL: '${{ secrets.DATABASE_URL }}' }
+  deploy-api:
+    needs: migration
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: 'deploy/cloudflare/api/package-lock.json' }
+      - run: cd deploy/cloudflare/api && npm ci && npx wrangler deploy --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  wait-api:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: |
+          for i in $(seq 1 30); do curl --fail --silent "$CLOUDFLARE_API_URL/health/ready" && exit 0; sleep $(( i < 6 ? i * 5 : 30 )); done; exit 1
+        env: { CLOUDFLARE_API_URL: '${{ secrets.CLOUDFLARE_API_URL }}' }
+  deploy-web:
+    needs: wait-api
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: 'apps/web/package-lock.json' }
+      - run: cd apps/web && npm ci && npm run cf:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          API_INTERNAL_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+          NEXT_PUBLIC_API_URL: /api/backend
+  production-smoke:
+    needs: deploy-web
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: |
+          set -euo pipefail
+          curl --fail --silent "$CLOUDFLARE_API_URL/health/ready"
+          curl --fail --silent "$CLOUDFLARE_API_URL/ponds?limit=1"
+          curl --fail --silent "$CLOUDFLARE_WEB_URL/"
+          curl --fail --silent "$CLOUDFLARE_WEB_URL/map"
+          curl --fail --silent "$CLOUDFLARE_WEB_URL/api/backend/health"
+          curl --fail --silent "$CLOUDFLARE_WEB_URL/api/backend/ponds?limit=1"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$CLOUDFLARE_API_URL/disaster-events")" = "403"
+        env:
+          CLOUDFLARE_API_URL: ${{ secrets.CLOUDFLARE_API_URL }}
+          CLOUDFLARE_WEB_URL: ${{ secrets.CLOUDFLARE_WEB_URL }}

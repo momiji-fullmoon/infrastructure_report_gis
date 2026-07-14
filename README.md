@@ -79,3 +79,41 @@ python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --limit 1000
 ## リスク評価
 
 `hazard`、`vulnerability`、`exposure`、`anomaly`、`uncertainty` を0〜1に正規化し、設定可能な重みで合成します。これは「リスクスクリーニングスコア」であり、決壊確率ではありません。
+
+## Cloudflare deployment status
+
+- Cloudflare deployment configuration: implemented
+- Cloudflare production deployment: not yet verified
+- Full production import: not yet run
+
+### Local development
+
+Docker Compose remains the local path: PostGIS container, FastAPI container, and Next.js container. Use `make up`, `make migrate`, and `make seed` (`seed-docker`) for container-based data loading. Use `make seed-host` only when intentionally writing from the host to a configured PostGIS database.
+
+### Cloudflare architecture
+
+The planned production architecture is OpenNext on Cloudflare Workers for the web app, an API Worker backed by a Cloudflare Container running FastAPI, managed PostgreSQL/PostGIS outside Cloudflare, and R2 for ledgers/import artifacts. D1 is not used for PostGIS data.
+
+### First deployment
+
+See `docs/deployment/cloudflare-first-deploy.md`. Deployment is manual through the `Deploy Cloudflare production` GitHub Actions workflow until real production smoke tests pass.
+
+### Required secrets
+
+See `docs/deployment/cloudflare-secrets.md`. Secret values must be configured in Wrangler/GitHub environments, not committed.
+
+### Production migration
+
+Alembic migrations run in the deployment workflow before API deployment. The API Container does not run migrations at startup.
+
+### Production import
+
+Use the manual `Import production ledger` workflow. It downloads the Excel ledger from R2 and runs the importer CLI on the GitHub Actions runner against PostGIS.
+
+### Smoke tests
+
+Production smoke checks verify API `/health/ready`, API `/ponds?limit=1`, Web `/`, Web `/map`, and Web proxy `/api/backend/*` endpoints.
+
+### Known limitations
+
+Cloudflare production deployment, custom domains, and the full production import require real Cloudflare, R2, and managed PostGIS credentials. The default MapLibre fallback style is for development; configure `NEXT_PUBLIC_MAP_STYLE_URL` for production.

@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate migrate-down seed import-ponds import-ponds-full import-ponds-rerun benchmark-import test test-unit test-integration test-web e2e lint typecheck format
+.PHONY: setup up down migrate migrate-down seed seed-docker seed-host import-ponds import-ponds-full import-ponds-rerun benchmark-import test test-unit test-integration test-web e2e lint typecheck format cf-web-preview cf-web-deploy cf-api-dev cf-api-deploy cf-deploy
 setup:
 	cd apps/api && python -m pip install -e '.[dev]'
 	cd apps/web && npm ci
@@ -11,7 +11,10 @@ migrate:
 	cd apps/api && alembic upgrade head
 migrate-down:
 	cd apps/api && alembic downgrade -1
-seed:
+seed: seed-docker
+seed-docker:
+	docker compose exec -T api python -m app.cli.import_ponds --input /data/tameike_ichiranR8.xlsx --mode upsert --batch-size 100 --limit 100 --report /tmp/import-sample.json
+seed-host:
 	cd apps/api && python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 100 --limit 100 --report ../../artifacts/import-sample.json
 import-ponds:
 	cd apps/api && python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --mode upsert --batch-size 1000 --limit 1000 --report ../../artifacts/import-sample.json
@@ -46,3 +49,14 @@ typecheck:
 
 format:
 	cd apps/api && ruff format app tests
+
+cf-web-preview:
+	cd apps/web && npm run cf:preview
+cf-web-deploy:
+	cd apps/web && npm run cf:deploy
+cf-api-dev:
+	cd deploy/cloudflare/api && npx wrangler dev
+cf-api-deploy:
+	cd deploy/cloudflare/api && npx wrangler deploy
+cf-deploy:
+	@echo "Use GitHub Actions production environment"
