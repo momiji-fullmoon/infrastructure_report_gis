@@ -1,4 +1,4 @@
-.PHONY: setup up down migrate migrate-down seed import-ponds import-ponds-full import-ponds-rerun benchmark-import test test-unit test-integration test-web e2e lint typecheck
+.PHONY: setup up down migrate migrate-down seed import-ponds import-ponds-full import-ponds-rerun benchmark-import test test-unit test-integration test-web e2e lint typecheck format
 setup:
 	cd apps/api && python -m pip install -e '.[dev]'
 	cd apps/web && npm ci
@@ -43,3 +43,6 @@ lint:
 
 typecheck:
 	cd apps/web && npm run typecheck
+
+format:
+	cd apps/api && ruff format app tests

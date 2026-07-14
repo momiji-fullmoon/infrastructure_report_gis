@@ -2,20 +2,34 @@
 
 NEDO Space Data Challenge「テーマ2：インフラに係る防災・災害対応」向けのMVPです。衛星データ、ため池台帳、地形、気象、AI、物理シミュレーションを統合する将来構成を前提に、現時点では台帳取り込み、地図検索、詳細、災害イベント、説明可能なリスクスクリーニングを実装しています。
 
-## 起動
+## 推奨起動手順（空DB）
+
+Docker Compose は `.env` を読み込みます。`.env.example` はテンプレート専用です。
 
 ```bash
+git clone https://github.com/momiji-fullmoon/infrastructure_report_gis.git
+cd infrastructure_report_gis
 cp .env.example .env
-make setup
-make migrate
+docker compose down -v
+docker compose up --build -d
+docker compose ps
+curl --fail http://localhost:8000/health
+curl --fail http://localhost:3000/
 make seed
-make up
+```
+
+Compose の `migrate` サービスが Alembic を実行するため、通常起動時に `make migrate` は不要です。ホストから手動でマイグレーションする場合のみ次を実行してください。
+
+```bash
+cd apps/api
+DATABASE_URL=postgresql+psycopg://tameike:tameike@localhost:5432/tameike alembic upgrade head
 ```
 
 - Web UI: http://localhost:3000
 - API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
-- MinIO Console: http://localhost:9001
+- Docker 内 DATABASE_URL: `postgresql+psycopg://tameike:tameike@db:5432/tameike`
+- ホスト上 DATABASE_URL: `postgresql+psycopg://tameike:tameike@localhost:5432/tameike`
 
 ## 主要コマンド
 
@@ -23,7 +37,6 @@ make up
 make setup
 make up
 make down
-make migrate
 make seed
 make import-ponds
 make test
@@ -66,36 +79,3 @@ python -m app.cli.import_ponds --input ../../tameike_ichiranR8.xlsx --limit 1000
 ## リスク評価
 
 `hazard`、`vulnerability`、`exposure`、`anomaly`、`uncertainty` を0〜1に正規化し、設定可能な重みで合成します。これは「リスクスクリーニングスコア」であり、決壊確率ではありません。
-
-
-## PostGIS / Import / Frontend integration
-
-```bash
-git clone <repo>
-cd infrastructure_report_gis
-cp .env.example .env
-make up
-make migrate
-make seed
-make test-integration
-make import-ponds-full
-```
-
-Docker Compose starts `db -> migrate -> api -> web`. Development passwords in `.env.example` are local-only. Browser requests use `/api/backend` and Next.js rewrites them to `API_INTERNAL_URL`.
-
-Useful commands: `make migrate`, `make migrate-down`, `make seed`, `make import-ponds`, `make import-ponds-full`, `make test`, `make test-integration`, `make test-web`, `make e2e`, `make lint`, `make format`.
-
-
-## Empty-environment startup
-
-```bash
-git clone <repo-url>
-cd infrastructure_report_gis
-cp .env.example .env
-docker compose down -v
-docker compose up --build
-make seed
-make import-ponds-full
-```
-
-The importer expects the real R8 Excel ledger columns exactly as documented in `docs/decisions/0004-real-excel-schema.md`. Spatial schema changes are managed by Alembic only; application startup does not create tables implicitly.

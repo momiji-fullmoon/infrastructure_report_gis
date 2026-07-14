@@ -1,6 +1,9 @@
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pathlib import Path
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -43,7 +46,10 @@ def health(db:Session=Depends(get_db)):
         if _is_pg(db):
             db.execute(text('select PostGIS_Version()')); out['postgis']='ok'
             current=db.scalar(text('select version_num from alembic_version limit 1'))
-            script_head='0001_initial_postgis'
+            alembic_ini = Path(__file__).resolve().parents[2] / 'alembic.ini'
+            config = Config(str(alembic_ini))
+            config.set_main_option('script_location', str(alembic_ini.parent / 'alembic'))
+            script_head = ScriptDirectory.from_config(config).get_current_head()
             out['migration']='head' if current==script_head else f'not_head:{current}'
             if current != script_head: out['status']='error'; return JSONResponse(out, status_code=503)
         else:

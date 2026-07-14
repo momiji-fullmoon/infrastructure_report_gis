@@ -13,14 +13,19 @@ services:
       retries: 20
   migrate:
     build: ./apps/api
-    env_file: .env.example
+    env_file:
+      - .env
     command: alembic upgrade head
     depends_on:
       db:
         condition: service_healthy
   api:
     build: ./apps/api
-    env_file: .env.example
+    env_file:
+      - .env
+    volumes:
+      - ./tameike_ichiranR8.xlsx:/data/tameike_ichiranR8.xlsx:ro
+      - ./tameike_ichiranR8.xlsx:/data/test-fixtures/tameike-small.xlsx:ro
     ports: ["8000:8000"]
     depends_on:
       migrate:
