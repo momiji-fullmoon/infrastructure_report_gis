@@ -1,17 +1,28 @@
-.PHONY: setup up down migrate migrate-down seed seed-docker seed-host import-ponds import-ponds-full import-ponds-rerun benchmark-import test test-unit test-integration test-web e2e lint typecheck format cf-web-preview cf-web-deploy cf-api-dev cf-api-deploy cf-deploy
+.PHONY: setup setup-local up up-local api-local web-local down migrate migrate-local migrate-down seed seed-local seed-docker seed-host import-ponds import-ponds-full import-ponds-rerun benchmark-import test test-unit test-integration test-web e2e lint typecheck format cf-web-preview cf-web-deploy cf-api-dev cf-api-deploy cf-deploy
 setup:
 	cd apps/api && python -m pip install -e '.[dev]'
 	cd apps/web && npm ci
+setup-local: setup migrate-local seed-local
 up:
 	docker compose up --build
+up-local:
+	@echo "Run these in separate terminals: make api-local and make web-local"
+api-local:
+	cd apps/api && DATABASE_URL=sqlite:///./tameike.db ALLOW_MUTATIONS=true uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+web-local:
+	cd apps/web && API_INTERNAL_URL=http://localhost:8000 NEXT_PUBLIC_API_URL=/api/backend npm run dev
 
 down:
 	docker compose down -v
 migrate:
 	cd apps/api && alembic upgrade head
+migrate-local:
+	cd apps/api && DATABASE_URL=sqlite:///./tameike.db python -c "from app.db.session import Base, engine; from app.models import models; Base.metadata.create_all(bind=engine)"
 migrate-down:
 	cd apps/api && alembic downgrade -1
 seed: seed-docker
+seed-local:
+	cd apps/api && DATABASE_URL=sqlite:///./tameike.db PYTHONPATH=. python scripts/seed_sample.py
 seed-docker:
 	docker compose exec -T api python -m app.cli.import_ponds --input /data/tameike_ichiranR8.xlsx --mode upsert --batch-size 100 --limit 100 --report /tmp/import-sample.json
 seed-host:
